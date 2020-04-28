@@ -10,23 +10,22 @@ namespace TraceRouteUtil
 {
     public class Ping
     {
-        private static readonly Dictionary<byte, string> messageTypes;
+        private static readonly Dictionary<byte, string> messageTypes = new Dictionary<byte, string>
+            {
+                { 0, "Echo reply" },
+                { 3, "Cannot reach endpoint" },
+                { 5, "Readdress route" },
+                { 8, "Echo request" },
+                { 9, "Router message" },
+                { 10, "Request message router" },
+                { 11, "TTL exceeded" },
+                { 12, "Parameters issues" },
+                { 13, "Time mark request" },
+                { 14, "Time mark reply" }
+            };
+
         private Socket socket;
         private IPEndPoint local;
-        static Ping()
-        {
-            messageTypes = new Dictionary<byte, string>();
-            messageTypes.Add(0, "Echo reply");
-            messageTypes.Add(3, "Cannot reach endpoint");
-            messageTypes.Add(5, "Readdress route");
-            messageTypes.Add(8, "Echo request");
-            messageTypes.Add(9, "Router message");
-            messageTypes.Add(10, "Request message router");
-            messageTypes.Add(11, "TTL exceeded");
-            messageTypes.Add(12, "Parameters issues");
-            messageTypes.Add(13, "Time mark request");
-            messageTypes.Add(14, "Time mark reply");
-        }
         public Ping()
         {
             #region GET LOCAL IP
@@ -43,24 +42,14 @@ namespace TraceRouteUtil
 
         private bool Send(IPAddress address, short ttl)
         {
-            socket = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Icmp);
+            socket = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Icmp);           
+            
             socket.Bind(local);
             socket.Ttl = ttl;
             socket.ReceiveTimeout = 5000;
             #region GENERATE ICMP REQUEST PACKET
             byte[] sendData = new byte[12];
             sendData[0] = 8;    // type
-            sendData[1] = 0;    // code
-            sendData[2] = 0;    // checksum
-            sendData[3] = 0;
-            sendData[4] = 0;    // identifier
-            sendData[5] = 0;
-            sendData[6] = 0;    // sequence
-            sendData[7] = 0;
-            sendData[8] = 0;    // time
-            sendData[9] = 0;
-            sendData[10] = 0;
-            sendData[11] = 0;
             int checksum = 0;
             for (int i = 0; i < 11; i++)
             {
@@ -125,17 +114,5 @@ namespace TraceRouteUtil
             return result;
         }
 
-        public bool PingRequest(string hostName, short ttl, int times)
-        {
-            IPAddress ip = IPAddress.Any;
-            var addressList = Dns.GetHostEntry(hostName).AddressList;
-            foreach (IPAddress item in addressList)
-            {
-                if (item.AddressFamily == AddressFamily.InterNetwork)
-                    ip = item;
-            }
-
-            return PingRequest(ip, ttl, times);
-        }
     }
 }
