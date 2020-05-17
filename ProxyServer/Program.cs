@@ -22,9 +22,9 @@ namespace ProxyServer
         private static string login = "test"; 
         private static string password = "123123"; 
 
-        private static bool appendHtml = true; 
+        private static bool appendHtml = false;
 
-        private static bool allowBlackList = true;
+        private static bool allowBlackList = false;
         private static string[] blackList = null; 
 
         static void Main(string[] args)
@@ -66,13 +66,13 @@ namespace ProxyServer
                         }
                         else
                         {
-                            if (http.Method != HTTP.Parser.MethodsList.CONNECT)
+                            if (http.Method == HTTP.Parser.MethodsList.GET || http.Method == HTTP.Parser.MethodsList.POST)
                             {
                                 WriteLog("Получен запрос {0} байт, метод {1}, хост {2}:{3}", httpRequest.Length, http.Method, http.Host, http.Port);
                             }
 
                             byte[] response = null;
-
+                            
                             if (needAuth)
                             {
                                 if (!http.Items.ContainsKey("Authorization"))
@@ -101,8 +101,17 @@ namespace ProxyServer
                                 myClient.Send(response, response.Length, SocketFlags.None);
                                 return;
                             }
-                            
-                            IPHostEntry myIPHostEntry = Dns.GetHostEntry(http.Host);
+
+                            IPHostEntry myIPHostEntry;
+
+                            try
+                            {
+                                myIPHostEntry = Dns.Resolve(http.Host.Trim());
+                            }
+                            catch (Exception ex)
+                            {
+                                myIPHostEntry = null;
+                            }
 
                             if (myIPHostEntry == null || myIPHostEntry.AddressList == null || myIPHostEntry.AddressList.Length <= 0)
                             {
@@ -111,7 +120,7 @@ namespace ProxyServer
                             else
                             {
                                 IPEndPoint myIPEndPoint = new IPEndPoint(myIPHostEntry.AddressList[0], http.Port);
- 
+
                                 if (http.Method == HTTP.Parser.MethodsList.CONNECT)
                                 {
                                     //WriteLog("Протокол HTTPS не реализован.");
@@ -119,8 +128,20 @@ namespace ProxyServer
                                 }
                                 else
                                 {
-                                    using (Socket myRerouting = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                                    using (Socket myRerouting = new Socket(myIPEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
                                     {
+                                        string str = Encoding.UTF8.GetString(httpRequest);
+                                        if (http.Method == HTTP.Parser.MethodsList.GET)
+                                        {
+                                            var words = str.Split(' ');
+                                            words[1] = words[1].Substring(words[1].IndexOf('/', words[1].IndexOf('/', words[1].IndexOf('/') + 1) + 1));
+                                            str = string.Join(" ", words);
+                                        }
+
+                                        File.WriteAllText("E:\\myfile.txt", str);
+
+                                        httpRequest = Encoding.UTF8.GetBytes(str);
+
                                         myRerouting.Connect(myIPEndPoint);
                                         if (myRerouting.Send(httpRequest, httpRequest.Length, SocketFlags.None) != httpRequest.Length)
                                         {
@@ -133,7 +154,6 @@ namespace ProxyServer
                                             {
                                                 WriteLog("Получен ответ {0} байт, код состояния {1}", httpResponse.Source.Length, httpResponse.StatusCode);
                                                 response = httpResponse.Source;
-
                                                 switch (httpResponse.StatusCode)
                                                 {
                                                     case 400:
@@ -163,7 +183,7 @@ namespace ProxyServer
                                                                 response = httpResponse.Source;
                                                             }
                                                         }
-                                                        
+
                                                         break;
                                                 }
                                             }
@@ -173,15 +193,15 @@ namespace ProxyServer
                                             }
                                         }
 
-                                        myRerouting.Close();
+                                        //myRerouting.Close();
                                     }
-                                } 
-                                
+                                }
+
                                 if (response != null) myClient.Send(response, response.Length, SocketFlags.None);
                             }
                         }
 
-                        myClient.Close();
+                        //myClient.Close();
                     }
                 }
             }
