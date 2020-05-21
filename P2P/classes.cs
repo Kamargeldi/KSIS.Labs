@@ -109,11 +109,46 @@ namespace P2P
             return null;
         }
 
+        public static IPAddress GetSubnetMask(IPAddress address)
+        {
+            foreach (NetworkInterface adapter in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                foreach (UnicastIPAddressInformation unicastIPAddressInformation in adapter.GetIPProperties().UnicastAddresses)
+                {
+                    if (unicastIPAddressInformation.Address.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        if (address.Equals(unicastIPAddressInformation.Address))
+                        {
+                            return unicastIPAddressInformation.IPv4Mask;
+                        }
+                    }
+                }
+            }
+            throw new ArgumentException(string.Format("Can't find subnetmask for IP address '{0}'", address));
+        }
+
+
+
+        public static IPAddress GetBroadcast(IPAddress address, IPAddress subnet)
+        {
+            string[] result;
+            string[] addr;
+            string[] sub;
+            addr = address.ToString().Split('.');
+            sub = subnet.ToString().Split('.');
+            result = new string[4];
+            for (int i = 0; i < 4; i++)
+            {
+                result[i] = (int.Parse(sub[i]) & int.Parse(addr[i])).ToString();
+                if (int.Parse(sub[i]) == 0)
+                {
+                    result[i] = "255";
+                }
+            }
+
+            return IPAddress.Parse(string.Join(".", result));
+        }
 
     }
-
-    
-
-
 
 }

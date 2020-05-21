@@ -14,9 +14,8 @@ namespace ProxyServer
 {
     class Program
     {
-
-        private static string proxyAddress = "127.0.0.1";
-        private static int proxyPort = 8888; 
+        private static string proxyAddress = "192.168.43.109";
+        private static int proxyPort = 1267;
 
         private static bool needAuth = false; 
         private static string login = "test"; 
@@ -45,7 +44,7 @@ namespace ProxyServer
                 {
                     Thread t = new Thread(ExecuteRequest);
                     t.IsBackground = true;
-                    t.Start(myTCP.AcceptSocket());
+                    t.Start(myTCP.AcceptTcpClient());
                 }
             }
         }
@@ -54,11 +53,11 @@ namespace ProxyServer
         {
             try
             {
-                using (Socket myClient = (Socket)arg)
+                using (TcpClient myClient = (TcpClient)arg)
                 {
                     if (myClient.Connected)
                     {
-                        byte[] httpRequest = ReadToEnd(myClient);
+                        byte[] httpRequest = ReadToEnd(myClient.Client);
                         HTTP.Parser http = new HTTP.Parser(httpRequest);
                         if (http.Items == null || http.Items.Count <= 0 || !http.Items.ContainsKey("Host"))
                         {
@@ -78,7 +77,7 @@ namespace ProxyServer
                                 if (!http.Items.ContainsKey("Authorization"))
                                 {
                                     response = GetHTTPError(401, "Unauthorized");
-                                    myClient.Send(response, response.Length, SocketFlags.None);
+                                    myClient.GetStream().Write(response, 0, response.Length);
                                     return;
                                 }
                                 else
@@ -89,7 +88,7 @@ namespace ProxyServer
                                     if (login != _login || password != pwd)
                                     {
                                         response = GetHTTPError(401, "Unauthorized");
-                                        myClient.Send(response, response.Length, SocketFlags.None);
+                                        myClient.GetStream().Write(response, 0, response.Length);
                                         return;
                                     }
                                 }
@@ -98,7 +97,7 @@ namespace ProxyServer
                             if (allowBlackList && blackList != null && Array.IndexOf(blackList, http.Host.ToLower()) != -1)
                             {
                                 response = GetHTTPError(403, "Forbidden");
-                                myClient.Send(response, response.Length, SocketFlags.None);
+                                myClient.GetStream().Write(response, 0, response.Length);
                                 return;
                             }
 
@@ -123,85 +122,77 @@ namespace ProxyServer
 
                                 if (http.Method == HTTP.Parser.MethodsList.CONNECT)
                                 {
-                                    //WriteLog("Протокол HTTPS не реализован.");
                                     response = GetHTTPError(501, "Not Implemented");
                                 }
                                 else
                                 {
-                                    using (Socket myRerouting = new Socket(myIPEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                                    using (TcpClient myRerouting = new TcpClient(myIPEndPoint.AddressFamily))
                                     {
+
                                         string str = Encoding.UTF8.GetString(httpRequest);
-                                        if (http.Method == HTTP.Parser.MethodsList.GET)
+                                        if (http.Method == HTTP.Parser.MethodsList.GET || http.Method == HTTP.Parser.MethodsList.POST)
                                         {
                                             var words = str.Split(' ');
                                             words[1] = words[1].Substring(words[1].IndexOf('/', words[1].IndexOf('/', words[1].IndexOf('/') + 1) + 1));
                                             str = string.Join(" ", words);
                                         }
 
-                                        File.WriteAllText("E:\\myfile.txt", str);
+                                        //File.WriteAllText("E:\\myfile.txt", str);
 
                                         httpRequest = Encoding.UTF8.GetBytes(str);
 
                                         myRerouting.Connect(myIPEndPoint);
-                                        if (myRerouting.Send(httpRequest, httpRequest.Length, SocketFlags.None) != httpRequest.Length)
+                                        myRerouting.GetStream().Write(httpRequest, 0, httpRequest.Length);
+
+                                        do
                                         {
-                                            WriteLog("Данные хосту {0} не были отправлены...", http.Host);
-                                        }
-                                        else
-                                        {
-                                            HTTP.Parser httpResponse = new HTTP.Parser(ReadToEnd(myRerouting));
-                                            if (httpResponse.Source != null && httpResponse.Source.Length > 0)
-                                            {
-                                                WriteLog("Получен ответ {0} байт, код состояния {1}", httpResponse.Source.Length, httpResponse.StatusCode);
-                                                response = httpResponse.Source;
-                                                switch (httpResponse.StatusCode)
-                                                {
-                                                    case 400:
-                                                    case 403:
-                                                    case 404:
-                                                    case 407:
-                                                    case 500:
-                                                    case 501:
-                                                    case 502:
-                                                    case 503:
-                                                        response = GetHTTPError(httpResponse.StatusCode, httpResponse.StatusMessage);
-                                                        break;
+                                            myClient.GetStream().WriteByte((byte)myRerouting.GetStream().ReadByte());
+                                            //HTTP.Parser httpResponse = new HTTP.Parser(ReadToEnd(myRerouting.Client));
+                                            //if (httpResponse.Source != null && httpResponse.Source.Length > 0)
+                                            //{
+                                                //WriteLog("Получен ответ {0} байт, код состояния {1}", httpResponse.Source.Length, httpResponse.StatusCode);
+                                                //response = httpResponse.Source;
+                                                
+                                                //switch (httpResponse.StatusCode)
+                                                //{
+                                                //    case 400:
+                                                //    case 403:
+                                                //    case 404:
+                                                //    case 407:
+                                                //    case 500:
+                                                //    case 501:
+                                                //    case 502:
+                                                //    case 503:
+                                                //        //response = GetHTTPError(httpResponse.StatusCode, httpResponse.StatusMessage);
+                                                //        break;
 
-                                                    default:
-                                                        if (appendHtml)
-                                                        {
-                                                            if (httpResponse.Items.ContainsKey("Content-Type") && ((HTTP.ItemContentType)httpResponse.Items["Content-Type"]).Value == "text/html")
-                                                            {
-                                                                string body = httpResponse.GetBodyAsString();
+                                                //    default:
+                                                //        if (appendHtml)
+                                                //        {
+                                                //            if (httpResponse.Items.ContainsKey("Content-Type") && ((HTTP.ItemContentType)httpResponse.Items["Content-Type"]).Value == "text/html")
+                                                //            {
+                                                //                string body = httpResponse.GetBodyAsString();
 
-                                                                body = Regex.Replace(body, "<title>(?<title>.*?)</title>", "<title>ProxyServer - $1</title>");
+                                                //                body = Regex.Replace(body, "<title>(?<title>.*?)</title>", "<title>ProxyServer - $1</title>");
 
-                                                                body = Regex.Replace(body, "(<body.*?>)", "$1<div style='height:20px;width:100%;background-color:black;color:white;font-weight:bold;text-align:center;'>Example of Proxy Server by Aleksey Nemiro</div>");
+                                                //                body = Regex.Replace(body, "(<body.*?>)", "$1<div style='height:20px;width:100%;background-color:black;color:white;font-weight:bold;text-align:center;'>Example of Proxy Server by Aleksey Nemiro</div>");
 
-                                                                httpResponse.SetStringBody(body);
+                                                //                httpResponse.SetStringBody(body);
 
-                                                                response = httpResponse.Source;
-                                                            }
-                                                        }
+                                                //                response = httpResponse.Source;
+                                                //            }
+                                                //        }
 
-                                                        break;
-                                                }
-                                            }
-                                            else
-                                            {
-                                                WriteLog("Получен ответ 0 байт");
-                                            }
-                                        }
-
-                                        //myRerouting.Close();
+                                                //        break;
+                                                //}
+                                            //}
+                                        } while (true);
                                     }
                                 }
 
-                                if (response != null) myClient.Send(response, response.Length, SocketFlags.None);
+                                //if (response != null) myClient.GetStream().Write(response, 0, response.Length);
                             }
                         }
-
-                        //myClient.Close();
                     }
                 }
             }
@@ -217,7 +208,7 @@ namespace ProxyServer
             int len = 0;
             using (MemoryStream m = new MemoryStream())
             {
-                while (mySocket.Poll(1000000, SelectMode.SelectRead) && (len = mySocket.Receive(b, mySocket.ReceiveBufferSize, SocketFlags.None)) > 0)
+                while (mySocket.Poll(1_000_000, SelectMode.SelectRead) && (len = mySocket.Receive(b, mySocket.ReceiveBufferSize, SocketFlags.None)) > 0)
                 {
                     m.Write(b, 0, len);
                 }

@@ -11,15 +11,27 @@ namespace P2P
     class Program
     {
         public static object mutex = new object();
-        const int TcpPort = 1267;
-        const int UdpPort = 1268;
+        static int TcpPortListen;
+        static int UdpPortListen;
+        static int TcpPortSend;
+        static int UdpPortSend;
         static bool exit = false;
 
 
         static void Main(string[] args)
         {
-            IPAddress broadcastAddr = IPAddress.Parse("192.168.43.255");
-            IPEndPoint broadcastEP = new IPEndPoint(broadcastAddr, UdpPort);
+            Console.Write("Listen tcp port: ");
+            TcpPortListen = int.Parse(Console.ReadLine());
+            Console.Write("Connect tcp port: ");
+            TcpPortSend = int.Parse(Console.ReadLine());
+            Console.Write("Listen udp port: ");
+            UdpPortListen = int.Parse(Console.ReadLine());
+            Console.Write("Send udp port: ");
+            UdpPortSend = int.Parse(Console.ReadLine());
+
+
+            IPAddress broadcastAddr = Utils.GetBroadcast(Utils.GetLocalIpAddress(), Utils.GetSubnetMask(Utils.GetLocalIpAddress()));
+            IPEndPoint broadcastEP = new IPEndPoint(broadcastAddr, UdpPortSend);
             Thread UdpListenThread;
             UdpClient UdpListener;
             UdpClient UdpSender;
@@ -34,7 +46,7 @@ namespace P2P
 
             try
             {
-                UdpSender = new UdpClient(UdpPort, AddressFamily.InterNetwork);
+                UdpSender = new UdpClient(AddressFamily.InterNetwork);
                 IPAddress myIp = Utils.GetLocalIpAddress();
                 byte[] myNickBytes = Encoding.UTF8.GetBytes(myNick);
                 int sentBytes = UdpSender.Send(myNickBytes, myNickBytes.Length, broadcastEP);
@@ -56,7 +68,7 @@ namespace P2P
                 UdpListener = new UdpClient();
                 try
                 {
-                    IPEndPoint clientEP = new IPEndPoint(IPAddress.Any, UdpPort);
+                    IPEndPoint clientEP = new IPEndPoint(IPAddress.Any, UdpPortListen);
                     UdpListener.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                     UdpListener.ExclusiveAddressUse = false;
                     UdpListener.Client.Bind(clientEP);
@@ -67,7 +79,7 @@ namespace P2P
                         string clientNick = Encoding.ASCII.GetString(data);
                         Contacts.Add(new Node(clientNick, clientEP.Address, null));
                         TcpClient tcpConnection = new TcpClient();
-                        tcpConnection.Connect(new IPEndPoint(clientEP.Address, TcpPort));
+                        tcpConnection.Connect(new IPEndPoint(clientEP.Address, TcpPortSend));
 
                         Contacts[Contacts.Count - 1].Connection = tcpConnection;
 
@@ -94,7 +106,7 @@ namespace P2P
             TcpListenThread = new Thread(() =>
             {
                 
-                tcpListener = new TcpListener(IPAddress.Any, TcpPort);
+                tcpListener = new TcpListener(IPAddress.Any, TcpPortListen);
                 tcpListener.Start();
                 try
                 {
@@ -134,8 +146,6 @@ namespace P2P
                 string msg = Console.ReadLine();
                 if (msg == "/exit")
                 {
-                    //TcpListenThread.IsBackground = true;
-                    //UdpListenThread.IsBackground = true;
                     Console.WriteLine($"{myNick} [ip: {Utils.GetLocalIpAddress()}] left chat");
                     exit = true;
                 }
