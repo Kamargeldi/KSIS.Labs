@@ -23,7 +23,7 @@ namespace ProxyServer
 
         private static bool appendHtml = false;
 
-        private static bool allowBlackList = false;
+        private static bool allowBlackList = true;
         private static string[] blackList = null; 
 
         static void Main(string[] args)
@@ -137,56 +137,59 @@ namespace ProxyServer
                                             str = string.Join(" ", words);
                                         }
 
-                                        //File.WriteAllText("E:\\myfile.txt", str);
-
                                         httpRequest = Encoding.UTF8.GetBytes(str);
 
                                         myRerouting.Connect(myIPEndPoint);
                                         myRerouting.GetStream().Write(httpRequest, 0, httpRequest.Length);
 
-                                        do
+                                        HTTP.Parser httpResponse = new HTTP.Parser(ReadToEnd(myRerouting.Client));
+                                        if (httpResponse.Source != null && httpResponse.Source.Length > 0)
                                         {
-                                            myClient.GetStream().WriteByte((byte)myRerouting.GetStream().ReadByte());
-                                            //HTTP.Parser httpResponse = new HTTP.Parser(ReadToEnd(myRerouting.Client));
-                                            //if (httpResponse.Source != null && httpResponse.Source.Length > 0)
-                                            //{
-                                                //WriteLog("Получен ответ {0} байт, код состояния {1}", httpResponse.Source.Length, httpResponse.StatusCode);
-                                                //response = httpResponse.Source;
-                                                
-                                                //switch (httpResponse.StatusCode)
-                                                //{
-                                                //    case 400:
-                                                //    case 403:
-                                                //    case 404:
-                                                //    case 407:
-                                                //    case 500:
-                                                //    case 501:
-                                                //    case 502:
-                                                //    case 503:
-                                                //        //response = GetHTTPError(httpResponse.StatusCode, httpResponse.StatusMessage);
-                                                //        break;
+                                            WriteLog("Получен ответ {0} байт, код состояния {1}", httpResponse.Source.Length, httpResponse.StatusCode);
+                                            response = httpResponse.Source;
 
-                                                //    default:
-                                                //        if (appendHtml)
-                                                //        {
-                                                //            if (httpResponse.Items.ContainsKey("Content-Type") && ((HTTP.ItemContentType)httpResponse.Items["Content-Type"]).Value == "text/html")
-                                                //            {
-                                                //                string body = httpResponse.GetBodyAsString();
+                                            switch (httpResponse.StatusCode)
+                                            {
+                                                case 400:
+                                                case 403:
+                                                case 404:
+                                                case 407:
+                                                case 500:
+                                                case 501:
+                                                case 502:
+                                                case 503:
+                                                    response = GetHTTPError(httpResponse.StatusCode, httpResponse.StatusMessage);
+                                                    break;
 
-                                                //                body = Regex.Replace(body, "<title>(?<title>.*?)</title>", "<title>ProxyServer - $1</title>");
+                                                default:
+                                                    if (appendHtml)
+                                                    {
+                                                        if (httpResponse.Items.ContainsKey("Content-Type") && ((HTTP.ItemContentType)httpResponse.Items["Content-Type"]).Value == "text/html")
+                                                        {
+                                                            string body = httpResponse.GetBodyAsString();
 
-                                                //                body = Regex.Replace(body, "(<body.*?>)", "$1<div style='height:20px;width:100%;background-color:black;color:white;font-weight:bold;text-align:center;'>Example of Proxy Server by Aleksey Nemiro</div>");
+                                                            body = Regex.Replace(body, "<title>(?<title>.*?)</title>", "<title>ProxyServer - $1</title>");
 
-                                                //                httpResponse.SetStringBody(body);
+                                                            body = Regex.Replace(body, "(<body.*?>)", "$1<div style='height:20px;width:100%;background-color:black;color:white;font-weight:bold;text-align:center;'>Example of Proxy Server by Aleksey Nemiro</div>");
 
-                                                //                response = httpResponse.Source;
-                                                //            }
-                                                //        }
+                                                            httpResponse.SetStringBody(body);
 
-                                                //        break;
-                                                //}
-                                            //}
-                                        } while (true);
+                                                            response = httpResponse.Source;
+                                                        }
+                                                    }
+
+                                                    break;
+                                            }
+
+                                            if (response != null) myClient.GetStream().Write(response, 0, response.Length);
+
+                                            
+                                            do
+                                            {
+                                                myClient.GetStream().WriteByte((byte)myRerouting.GetStream().ReadByte());
+                                            }
+                                            while (true);
+                                        }
                                     }
                                 }
 
@@ -198,7 +201,7 @@ namespace ProxyServer
             }
             catch (Exception ex)
             {
-                WriteLog("Ошибка: ", ex.Message);
+                WriteLog("Ошибка сети: ", ex.Message);
             }
         }
 
@@ -208,7 +211,7 @@ namespace ProxyServer
             int len = 0;
             using (MemoryStream m = new MemoryStream())
             {
-                while (mySocket.Poll(1_000_000, SelectMode.SelectRead) && (len = mySocket.Receive(b, mySocket.ReceiveBufferSize, SocketFlags.None)) > 0)
+                while (mySocket.Poll(500_000, SelectMode.SelectRead) && (len = mySocket.Receive(b, mySocket.ReceiveBufferSize, SocketFlags.None)) > 0)
                 {
                     m.Write(b, 0, len);
                 }
